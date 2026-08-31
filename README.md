@@ -129,6 +129,7 @@ Then:
 
 ```bash
 pytest                                    # 29 tests, ~10 s, no training
+                                          # (15 skip until the data is present)
 python scripts/train.py --dry-run         # inspect the config, train nothing
 python scripts/evaluate.py --predictions tests/fixtures/predictions_ds2.npz
 ```

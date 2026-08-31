@@ -32,6 +32,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 RECORD = 213
 TOL = 1e-9
 
+# Everything in this module that loads a record needs the data present.
+pytestmark = pytest.mark.needs_data
+
 
 @pytest.fixture(scope="module")
 def baseline():
