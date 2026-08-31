@@ -1,0 +1,60 @@
+# ---- Environment ----
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.python-version
+
+# ---- Data: never committed, always downloaded ----
+data/*
+!data/README.md
+raw_data/
+unziped_data/
+*.dat
+*.hea
+*.atr
+*.xws
+*.mat
+*.csv
+*.npy
+*.npz
+*.pkl
+*.parquet
+*.zip
+*.gz
+
+# ---- Model artefacts ----
+*.h5
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.index
+*.meta
+*.tr
+checkpoints/
+models/
+base_models/
+runs/
+wandb/
+mlruns/
+
+# ---- Documents ----
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*:Zone.Identifier
+
+# ---- Tracked exceptions: small, curated outputs ----
+!results/**/*.csv
+!tests/fixtures/**/*.npz
+!tests/fixtures/**/*.csv
+
+# ---- Original source tree (kept locally, never published) ----

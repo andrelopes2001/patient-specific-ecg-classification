@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ecg-classification"
+version = "1.0.0"
+description = "Patient-specific ECG arrhythmia classification on the MIT-BIH Arrhythmia Database"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "André Lopes" }]
+requires-python = ">=3.10"
+keywords = ["ecg", "arrhythmia", "biomedical-signal-processing", "mit-bih", "deep-learning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.0",
+    "scikit-learn>=1.3",
+    "matplotlib>=3.7",
+    "wfdb>=4.1",
+    "PyWavelets>=1.4",
+    "imbalanced-learn>=0.11",
+    "tabulate>=0.9",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+keras = ["tensorflow>=2.15"]
+torch = ["torch>=2.1"]
+dev = ["pytest>=7.4", "ruff>=0.1", "jupyter>=1.0"]
+
+[project.urls]
+Repository = "https://github.com/andrelopes2001/patient-specific-ecg-classification"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ecg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
