@@ -55,19 +55,27 @@ def main() -> int:
     from ecg.segmentation import segment_records
     from ecg.train import evaluate_patient_specific, train_global
 
-    print("\nsegmenting DS1 ...")
-    df_train = segment_records(DS1, cfg)
-    print(f"  {len(df_train):,} beats")
+    try:
+        print("\nsegmenting DS1 ...")
+        df_train = segment_records(DS1, cfg)
+        print(f"  {len(df_train):,} beats")
 
-    print(f"training global model for {args.epochs} epochs ...")
-    model, _ = train_global(df_train, model, cfg, epochs=args.epochs)
+        print(f"training global model for {args.epochs} epochs ...")
+        model, _ = train_global(df_train, model, cfg, epochs=args.epochs)
 
-    print("segmenting DS2 ...")
-    df_test = segment_records(DS2, cfg)
-    print(f"  {len(df_test):,} beats")
+        print("segmenting DS2 ...")
+        df_test = segment_records(DS2, cfg)
+        print(f"  {len(df_test):,} beats")
+    except FileNotFoundError as exc:
+        print(f"\nerror: {exc}", file=sys.stderr)
+        return 1
 
     print("patient-specific fine-tuning ...")
-    _, metrics = evaluate_patient_specific(df_test, model, DS2, cfg)
+    try:
+        _, metrics = evaluate_patient_specific(df_test, model, DS2, cfg)
+    except ValueError as exc:
+        print(f"\nerror: {exc}", file=sys.stderr)
+        return 1
     print("\n" + metrics.summary())
 
     args.out.mkdir(parents=True, exist_ok=True)

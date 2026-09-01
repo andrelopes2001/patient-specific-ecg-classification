@@ -14,7 +14,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ecg.balance import class_counts, imbalance_report, smote
+from ecg.balance import (
+    class_counts,
+    imbalance_report,
+    random_oversample,
+    rebalance,
+    shift_augment,
+    smote,
+    undersample_majority,
+)
 from ecg.config import CLASSES, Config
 from ecg.evaluate import compute_metrics, metrics_table
 from ecg.models import build, mlp
@@ -117,6 +125,49 @@ def test_smote_balances_and_is_seeded(toy_beats):
 def test_smote_beats_keep_window_length(toy_beats):
     out = smote(toy_beats, Config())
     assert np.stack(out["beat"].to_numpy()).shape[1] == 151
+
+
+def test_undersample_caps_the_majority(toy_beats):
+    out = undersample_majority(toy_beats, 10, Config())
+    assert (out["Label"] == "N").sum() == 10
+    # minority classes are untouched
+    assert (out["Label"] == "F").sum() == (toy_beats["Label"] == "F").sum()
+
+
+def test_random_oversample_equalises(toy_beats):
+    out = random_oversample(toy_beats[["Label", "beat"]], 20, Config())
+    assert class_counts(out).nunique() == 1
+
+
+def test_shift_augment_balances_and_keeps_window_length(toy_beats):
+    """Beats are re-cut off-centre from the source signal, so every augmented
+    window must still be exactly window_length samples and lie inside the record."""
+    cfg = Config()
+    rng = np.random.default_rng(0)
+    signal = rng.normal(size=30_000)
+
+    out = shift_augment(toy_beats, 20, {100: signal}, cfg, rng=np.random.default_rng(1))
+
+    counts = class_counts(out)
+    assert counts.nunique() == 1 and counts.iloc[0] == 20
+    assert {len(b) for b in out["beat"]} == {cfg.window_length}
+    assert out["Sample"].min() >= cfg.window_left
+    assert out["Sample"].max() + cfg.window_right < len(signal)
+
+
+def test_shift_augment_is_seeded(toy_beats):
+    cfg = Config()
+    signal = np.random.default_rng(0).normal(size=30_000)
+    a = shift_augment(toy_beats, 20, {100: signal}, cfg, rng=np.random.default_rng(7))
+    b = shift_augment(toy_beats, 20, {100: signal}, cfg, rng=np.random.default_rng(7))
+    np.testing.assert_allclose(
+        np.stack(a["beat"].to_numpy()), np.stack(b["beat"].to_numpy())
+    )
+
+
+def test_rebalance_rejects_unknown_strategy(toy_beats):
+    with pytest.raises(ValueError, match="unknown strategy"):
+        rebalance(toy_beats, "magic", Config())
 
 
 # --- step 8: fine-tuning contract -------------------------------------------

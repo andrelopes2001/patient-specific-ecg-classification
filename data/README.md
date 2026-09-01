@@ -11,8 +11,13 @@ python scripts/download_data.py     # -> data/raw/mitdb   (48 records, ~90 MB)
 python scripts/build_csv.py         # -> data/interim     (~7 GB, 144 CSVs)
 ```
 
-Both scripts are idempotent. `download_data.py` skips records already present;
-pass `--force` to re-fetch.
+Both scripts are idempotent and skip work already done; pass `--force` to
+either one to redo it. `build_csv.py` also takes `--records` to build a subset,
+which is enough to run the tests:
+
+```bash
+python scripts/build_csv.py --records 213    # just the fixture record
+```
 
 ## Layout
 
