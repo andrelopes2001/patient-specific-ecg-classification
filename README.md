@@ -11,8 +11,10 @@ practical question becomes: *how little of a patient's own data do you need?*
 
 ![Personalisation curve](results/personalisation_curve.png)
 
-**Three minutes.** Beyond that, more fine-tuning data adds very little — and it
-matters far more than any of the synthetic-data augmentation tried here.
+**Three minutes.** Beyond that, more of the patient's own data adds very little —
+and it matters far more than any of the synthetic-data augmentation tried here.
+The blue curve is reproduced by this repository; the rest are the thesis
+figures, shown for comparison.
 
 ---
 
@@ -41,33 +43,56 @@ on — that is the point of the method, not a leak — but it never sees a test 
 
 ## Results
 
-Reported over all 22 DS2 patients pooled into one confusion matrix, 4 AAMI
-classes (F, N, S, V), 5 minutes of fine-tuning.
+Reproduced by this repository — one command, ~1 minute, bit-identical across
+runs at a fixed seed. Pooled over all 22 DS2 patients into one confusion matrix,
+4 AAMI classes, 5 minutes of fine-tuning, **no augmentation and no extra
+features**.
 
-| Augmentation | Extra features | Accuracy | Macro F1 | Kappa | F1 (F) | F1 (N) | F1 (S) | F1 (V) |
-|---|---|---|---|---|---|---|---|---|
-| cGAN | length + rate | **0.981** | 0.851 | **0.901** | 0.612 | 0.990 | 0.843 | 0.957 |
-| cGAN | heart rate | 0.980 | 0.848 | 0.897 | 0.604 | 0.990 | 0.840 | 0.956 |
-| **none** | — | 0.974 | **0.862** | 0.869 | **0.758** | 0.986 | 0.754 | 0.951 |
-| SMOTE | — | 0.970 | 0.813 | 0.852 | 0.558 | 0.984 | 0.759 | 0.950 |
-| cGAN | — | 0.969 | 0.806 | 0.849 | 0.532 | 0.984 | 0.758 | 0.951 |
+| | Accuracy | Macro F1 | Kappa | F1 (F) | F1 (N) | F1 (S) | F1 (V) |
+|---|---|---|---|---|---|---|---|
+| **This repo** | **0.980** | **0.869** | **0.898** | 0.705 | 0.990 | 0.823 | 0.958 |
+| Thesis, no augmentation | 0.974 | 0.862 | 0.869 | 0.758 | 0.986 | 0.754 | 0.951 |
+| Thesis, cGAN + length + rate | 0.981 | 0.851 | 0.901 | 0.612 | 0.990 | 0.843 | 0.957 |
+| Thesis, cGAN + heart rate | 0.980 | 0.848 | 0.897 | 0.604 | 0.990 | 0.840 | 0.956 |
+| Thesis, SMOTE | 0.970 | 0.813 | 0.852 | 0.558 | 0.984 | 0.759 | 0.950 |
+| Thesis, cGAN | 0.969 | 0.806 | 0.849 | 0.532 | 0.984 | 0.758 | 0.951 |
 
-Full sweep in [`results/thesis_metrics.csv`](results/thesis_metrics.csv);
-the analysis is in [`notebooks/02_results.ipynb`](notebooks/02_results.ipynb).
+```
+confusion matrix           predicted
+(5 min fine-tuning)     F      N      S      V
+                   F  222     32      1     31
+                   N   85  36282    111     88
+                   S    7    377   1194     12
+                   V   30     59      5   2580
+```
 
-**Reading these honestly.** The metric that matters on data this imbalanced is
-macro F1, and by that measure **the no-augmentation baseline wins**. Accuracy is
-near-meaningless here — class N is 89% of beats, so predicting "normal" for
-everything scores 0.89. The augmentation work earns its place at *short*
-personalisation windows, not at the ceiling; by three minutes the advantage is
-gone. Class F (fusion beats, under 1% of the data) is the weak point in every
-configuration.
+Reproduce with:
 
-> ⚠️ **These numbers are from the original thesis experiments, not reproduced by
-> this repository.** The saved checkpoints do not align with the documented
-> pipeline, so the metrics are cited from the recorded results rather than
-> re-derived.
-> Training is not run here.
+```bash
+python scripts/train.py --epochs 10 --seed 12    # ~1 min, writes results/metrics.json
+```
+
+**Reading these honestly.** On data this imbalanced the metric that matters is
+macro F1 — accuracy is near-meaningless when class N is 89% of beats, since
+predicting "normal" for everything scores 0.89. By macro F1 the plain pipeline
+with **no augmentation at all** comes out on top. The synthetic-data work earns
+its place at *short* personalisation windows, not at the ceiling; past three
+minutes the advantage is gone. Class F (fusion beats, under 1% of the data)
+remains the weak point everywhere.
+
+Two caveats worth stating plainly:
+
+- The augmentation rows are **thesis-reported**, not re-run here — the cGAN is
+  the one genuinely expensive component and retraining it was out of scope. Only
+  the first row is reproduced.
+- The comparison is therefore not exactly like-for-like. This pipeline fixes one
+  denoising setting throughout and seeds every RNG; the original left the
+  denoising configuration ambiguous between notebook cells and seeded only the
+  resamplers.
+
+The original saved checkpoints could not be aligned with the documented pipeline
+at all, which is why the thesis numbers are
+cited from its recorded results rather than re-derived from its weights.
 
 ## Model
 
@@ -134,11 +159,15 @@ python scripts/train.py --dry-run         # inspect the config, train nothing
 python scripts/evaluate.py --predictions tests/fixtures/predictions_ds2.npz
 ```
 
-To actually train — **hours on CPU**, and not required to explore the repo:
+Training the full pipeline takes **about a minute on CPU** — the model is 28k
+parameters, and most of that minute is segmenting beats:
 
 ```bash
-python scripts/train.py --epochs 10 --balance smote --train-minutes 5
+python scripts/train.py --epochs 10 --seed 12
 ```
+
+The cGAN in `src/ecg/cgan.py` is the one expensive component and is not part of
+that path.
 
 ## Layout
 
@@ -163,12 +192,13 @@ tests/              fixture-based regression tests
 
 `seed_everything()` seeds Python, NumPy, TensorFlow and PyTorch. All parameters
 live in a frozen `Config`; nothing downstream hardcodes a sampling rate or window
-bound.
+bound. Running `scripts/train.py --seed 12` twice produces **byte-identical**
+metrics and confusion matrices — verified, not assumed.
 
-The **thesis** results predate this and came from an unseeded run — the original
+The **thesis** results predate this and came from an unseeded run: the original
 seeded only the imbalanced-learn samplers, leaving beat augmentation and weight
-initialisation non-deterministic. Those numbers are therefore not bit-reproducible
-even with the original code, which is part of why they are cited rather than
+initialisation non-deterministic. Those numbers are not bit-reproducible even
+with the original code, which is part of why they are cited rather than
 re-derived.
 
 What *is* pinned exactly: [`tests/`](tests/) asserts the segmented beat tensor
