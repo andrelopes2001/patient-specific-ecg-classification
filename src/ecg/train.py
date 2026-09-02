@@ -18,6 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from .balance import balanced_class_weights
 from .config import CLASSES, DEFAULT, DS1, DS2, Config
 from .evaluate import Metrics, compute_metrics
 from .preprocessing import fit_scaler
@@ -58,13 +59,16 @@ def fine_tune(
     X_train: np.ndarray,
     y_train: np.ndarray,
     cfg: Config = DEFAULT,
-    max_epochs: int = 10,
-    loss_threshold: float = 0.005,
+    max_epochs: int | None = None,
+    loss_threshold: float | None = None,
 ):
     """Fine-tune a copy of ``model``; stop early once the loss is small enough.
 
     Returns ``(tuned_model, history)``. ``model`` itself is left untouched.
     """
+    max_epochs = cfg.finetune_max_epochs if max_epochs is None else max_epochs
+    loss_threshold = (cfg.finetune_loss_threshold if loss_threshold is None
+                      else loss_threshold)
     tuned = _clone_compiled(model)
     losses = []
     for _ in range(max_epochs):
@@ -133,13 +137,41 @@ def train_global(
     df: pd.DataFrame,
     model,
     cfg: Config = DEFAULT,
-    epochs: int = 10,
+    epochs: int | None = None,
     extra_features: tuple[str, ...] = (),
 ):
-    """Train the global model on DS1."""
+    """Train the global model on DS1.
+
+    Defaults reproduce the thesis: a fixed 10 epochs, no class weighting.
+
+    ``cfg.class_weight`` and ``cfg.early_stopping_patience`` enable
+    inverse-frequency weighting and early stopping. Both raised macro F1 on
+    held-out DS1 patients and then *lowered* it on DS2 by 0.024, outside the
+    seed spread -- see docs/experiments.md. They are kept as options because
+    the negative result is worth being able to reproduce, not because they help.
+    """
+    import keras
+
+    epochs = cfg.max_epochs if epochs is None else epochs
     train_df = df[df["Patient"].isin(DS1)]
     X, y = to_features(train_df, extra_features, cfg)
+
+    callbacks = []
+    if cfg.early_stopping_patience:
+        callbacks.append(
+            keras.callbacks.EarlyStopping(
+                monitor="loss",
+                patience=cfg.early_stopping_patience,
+                restore_best_weights=True,
+            )
+        )
     history = model.fit(
-        X, one_hot(y), epochs=epochs, batch_size=cfg.batch_size, verbose=0
+        X,
+        one_hot(y),
+        epochs=epochs,
+        batch_size=cfg.batch_size,
+        verbose=0,
+        callbacks=callbacks,
+        class_weight=balanced_class_weights(y, cfg.n_classes) if cfg.class_weight else None,
     )
     return model, history

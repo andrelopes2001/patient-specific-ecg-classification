@@ -88,6 +88,17 @@ class Config:
     batch_size: int = 50
     seed: int = 12
 
+    # Global-model training. Class weighting and early stopping are available
+    # but OFF by default: both improved results on held-out DS1 patients yet
+    # made them worse on DS2 (docs/experiments.md). The thesis settings win.
+    max_epochs: int = 10
+    early_stopping_patience: int = 0        # 0 disables early stopping
+    class_weight: bool = False
+
+    # Patient fine-tuning: single-epoch passes until the loss is small enough.
+    finetune_max_epochs: int = 10
+    finetune_loss_threshold: float = 0.005
+
     @property
     def window_length(self) -> int:
         """Total beat window in samples (151 by default)."""

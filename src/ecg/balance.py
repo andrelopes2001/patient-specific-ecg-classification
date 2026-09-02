@@ -13,6 +13,17 @@ import pandas as pd
 from .config import DEFAULT, Config
 
 
+def balanced_class_weights(targets: np.ndarray, n_classes: int = 4) -> dict[int, float]:
+    """Inverse-frequency weights, as used by sklearn's "balanced" mode.
+
+    DS1 is 90% class N and 0.8% class F. Without this the global model can
+    minimise its loss by ignoring the rare classes entirely.
+    """
+    counts = np.bincount(np.asarray(targets), minlength=n_classes).astype(float)
+    weights = len(targets) / (n_classes * np.maximum(counts, 1.0))
+    return {i: float(weights[i]) for i in range(n_classes)}
+
+
 def class_counts(df: pd.DataFrame, column: str = "Label") -> pd.Series:
     """Beats per class, most frequent first."""
     return df[column].value_counts()

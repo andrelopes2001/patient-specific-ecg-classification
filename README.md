@@ -12,9 +12,9 @@ practical question becomes: *how little of a patient's own data do you need?*
 ![Personalisation curve](results/personalisation_curve.png)
 
 **Three minutes.** Beyond that, more of the patient's own data adds very little —
-and it matters far more than any of the synthetic-data augmentation tried here.
-The blue curve is reproduced by this repository; the rest are the thesis
-figures, shown for comparison.
+and it matters more than any of the synthetic-data augmentation tried here. The
+blue curve is reproduced by this repository (3 seeds, error bars are ±1 SD); the
+rest are the thesis figures, shown for comparison.
 
 ---
 
@@ -43,56 +43,50 @@ on — that is the point of the method, not a leak — but it never sees a test 
 
 ## Results
 
-Reproduced by this repository — one command, ~1 minute, bit-identical across
-runs at a fixed seed. Pooled over all 22 DS2 patients into one confusion matrix,
-4 AAMI classes, 5 minutes of fine-tuning, **no augmentation and no extra
-features**.
+Reproduced by this repository — `scripts/train.py`, **averaged over 3 seeds**.
+Pooled across all 22 DS2 patients into one confusion matrix, 4 AAMI classes,
+5 minutes of fine-tuning, no augmentation and no extra features.
 
 | | Accuracy | Macro F1 | Kappa | F1 (F) | F1 (N) | F1 (S) | F1 (V) |
 |---|---|---|---|---|---|---|---|
-| **This repo** | **0.980** | **0.869** | **0.898** | 0.705 | 0.990 | 0.823 | 0.958 |
+| **This repo** (3 seeds) | **0.978 ± 0.001** | 0.857 ± 0.009 | **0.889** | 0.672 | 0.989 | **0.814** | 0.954 |
 | Thesis, no augmentation | 0.974 | 0.862 | 0.869 | 0.758 | 0.986 | 0.754 | 0.951 |
 | Thesis, cGAN + length + rate | 0.981 | 0.851 | 0.901 | 0.612 | 0.990 | 0.843 | 0.957 |
 | Thesis, cGAN + heart rate | 0.980 | 0.848 | 0.897 | 0.604 | 0.990 | 0.840 | 0.956 |
 | Thesis, SMOTE | 0.970 | 0.813 | 0.852 | 0.558 | 0.984 | 0.759 | 0.950 |
 | Thesis, cGAN | 0.969 | 0.806 | 0.849 | 0.532 | 0.984 | 0.758 | 0.951 |
 
-```
-confusion matrix           predicted
-(5 min fine-tuning)     F      N      S      V
-                   F  222     32      1     31
-                   N   85  36282    111     88
-                   S    7    377   1194     12
-                   V   30     59      5   2580
-```
-
-Reproduce with:
-
 ```bash
-python scripts/train.py --epochs 10 --seed 12    # ~1 min, writes results/metrics.json
+python scripts/train.py --epochs 10 --seed 12   # ~1 min, one seed
+python scripts/sweep.py --seeds 12 13 14        # the full curve, ~8 min
 ```
 
-**Reading these honestly.** On data this imbalanced the metric that matters is
-macro F1 — accuracy is near-meaningless when class N is 89% of beats, since
-predicting "normal" for everything scores 0.89. By macro F1 the plain pipeline
-with **no augmentation at all** comes out on top. The synthetic-data work earns
-its place at *short* personalisation windows, not at the ceiling; past three
-minutes the advantage is gone. Class F (fusion beats, under 1% of the data)
-remains the weak point everywhere.
+**Reading these honestly.** This reproduction **matches** the thesis baseline
+rather than beating it: macro F1 0.857 ± 0.009 against 0.862 is a tie inside the
+seed spread. It is ahead on kappa (0.889 vs 0.869) and on class S (0.814 vs
+0.754), and behind on class F (0.672 vs 0.758).
 
-Two caveats worth stating plainly:
+Macro F1 is the metric that matters here — accuracy is close to meaningless when
+class N is 89% of beats, since predicting "normal" everywhere scores 0.889. On
+that metric the plain pipeline with **no augmentation** is level with the best
+augmented configuration, and class F remains the weak point everywhere.
 
-- The augmentation rows are **thesis-reported**, not re-run here — the cGAN is
-  the one genuinely expensive component and retraining it was out of scope. Only
-  the first row is reproduced.
-- The comparison is therefore not exactly like-for-like. This pipeline fixes one
-  denoising setting throughout and seeds every RNG; the original left the
-  denoising configuration ambiguous between notebook cells and seeded only the
-  resamplers.
+Single runs are not trustworthy at this precision: macro F1 varies by up to
+0.02 between seeds, which is wider than most of the gaps in the table above.
+Every number in the first row is a 3-seed mean for that reason.
+
+Two caveats:
+
+- The augmentation rows are **thesis-reported**, not re-run — the cGAN is the
+  one genuinely expensive component and retraining it was out of scope. Only the
+  first row is reproduced here.
+- The comparison is not exactly like-for-like: this pipeline fixes one denoising
+  setting throughout and seeds every RNG, where the original left denoising
+  ambiguous between notebook cells and seeded only the resamplers.
 
 The original saved checkpoints could not be aligned with the documented pipeline
-at all, which is why the thesis numbers are
-cited from its recorded results rather than re-derived from its weights.
+at all, so the thesis numbers are cited from
+its recorded results rather than re-derived from its weights.
 
 ## Model
 
@@ -195,6 +189,10 @@ live in a frozen `Config`; nothing downstream hardcodes a sampling rate or windo
 bound. Running `scripts/train.py --seed 12` twice produces **byte-identical**
 metrics and confusion matrices — verified, not assumed.
 
+Determinism is not stability, though: *different* seeds move macro F1 by up to
+0.02. Reported figures are 3-seed means, and single-seed numbers should not be
+compared at three decimal places.
+
 The **thesis** results predate this and came from an unseeded run: the original
 seeded only the imbalanced-learn samplers, leaving beat augmentation and weight
 initialisation non-deterministic. Those numbers are not bit-reproducible even
@@ -207,20 +205,24 @@ filtering or windowing fails loudly rather than quietly costing F1.
 
 ## Provenance
 
-This is a refactor of the code behind an MSc dissertation (2024), *Patient-specific Real-Time Architecture for ECG Classification*.
+A refactor of the code behind an MSc dissertation
+(2024). The original was ~70 notebooks against a single 2,213-line
+`functions.py`, with one function defined 39 times in one notebook.
 
-The original was ~70 notebooks against a single 2,213-line `functions.py`, with
-one function defined 39 times across a single notebook.
+Model selection is written up in:
 
-Two things worth calling out, since a reader will wonder:
+- [`docs/experiments.md`](docs/experiments.md) — why the model is a 28k-parameter
+  MLP, and the things that were tried and did not work.
 
-- **An earlier version of this work had a leaky evaluation** — a random 80/20
-  split applied *after* oversampling, putting duplicated beats on both sides. It
-  was abandoned before the final results in favour of the patient-disjoint
-  DS1/DS2 split. It is documented rather than quietly deleted.
+Two findings a reader will reasonably wonder about:
+
+- **An earlier version had a leaky evaluation** — a random 80/20 split applied
+  *after* oversampling, putting duplicated beats on both sides. It was abandoned
+  before the final results in favour of the patient-disjoint DS1/DS2 split, and
+  is documented rather than quietly removed.
 - **Fine-tuning used to mutate the global model in place**, so each patient's
-  personalisation resumed from the previous patient's weights. Fixed here
-  (`train.py`), and covered by a regression test.
+  personalisation resumed from the previous patient's weights. Fixed in
+  `train.py` and covered by a regression test.
 
 ## Citation
 

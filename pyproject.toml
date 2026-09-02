@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "ecg-classification"
+name = "patient-specific-ecg-classification"
 version = "1.0.0"
 description = "Patient-specific ECG arrhythmia classification on the MIT-BIH Arrhythmia Database"
 readme = "README.md"

@@ -23,7 +23,11 @@ def main() -> int:
     p.add_argument("--arch", default="mlp", choices=["mlp", "cnn"])
     p.add_argument("--denoise", default="fir",
                    choices=["fir", "median", "wavelet", "none"])
-    p.add_argument("--epochs", type=int, default=10)
+    p.add_argument("--epochs", type=int, default=10,
+                   help="epochs for the global model")
+    p.add_argument("--class-weight", action="store_true",
+                   help="enable inverse-frequency class weighting "
+                        "(measured worse on DS2; see docs/experiments.md)")
     p.add_argument("--balance", default="none",
                    choices=["none", "oversample", "smote"])
     p.add_argument("--train-minutes", type=int, default=5)
@@ -39,6 +43,8 @@ def main() -> int:
         denoise=None if args.denoise == "none" else args.denoise,
         train_minutes=args.train_minutes,
         seed=args.seed,
+        max_epochs=args.epochs,
+        class_weight=args.class_weight,
     )
     seed_everything(cfg.seed)
 
@@ -46,6 +52,8 @@ def main() -> int:
     print(f"architecture : {args.arch} ({model.count_params():,} parameters)")
     print(f"window       : {cfg.window_length} samples ({cfg.window_ms:.0f} ms)")
     print(f"denoise      : {cfg.denoise}   balance: {args.balance}")
+    print(f"training     : <={cfg.max_epochs} epochs, early stop patience "
+          f"{cfg.early_stopping_patience}, class_weight={cfg.class_weight}")
     print(f"records      : DS1 {len(DS1)} train / DS2 {len(DS2)} evaluate")
 
     if args.dry_run:
@@ -60,8 +68,10 @@ def main() -> int:
         df_train = segment_records(DS1, cfg)
         print(f"  {len(df_train):,} beats")
 
-        print(f"training global model for {args.epochs} epochs ...")
-        model, _ = train_global(df_train, model, cfg, epochs=args.epochs)
+        print(f"training global model (<={cfg.max_epochs} epochs) ...")
+        model, hist = train_global(df_train, model, cfg)
+        print(f"  stopped after {len(hist.history['loss'])} epochs, "
+              f"final loss {hist.history['loss'][-1]:.4f}")
 
         print("segmenting DS2 ...")
         df_test = segment_records(DS2, cfg)
