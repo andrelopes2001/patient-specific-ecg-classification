@@ -59,7 +59,7 @@ def denoise_fir(
     """Baseline removal followed by a low-pass FIR filter.
 
     Note this uses ``lfilter``, which is causal and therefore introduces a phase
-    shift of roughly ``fir_order / 2`` samples. That matches the original thesis
+    shift of roughly ``fir_order / 2`` samples. That matches the earlier
     implementation and is kept deliberately: switching to ``filtfilt`` would
     change every downstream beat window.
     """

@@ -1,7 +1,7 @@
-"""Regression tests against fixtures captured from the original thesis code.
+"""Regression tests against fixtures captured from the earlier code.
 
 The fixtures in tests/fixtures/ were produced by calling the original
-functions.py. They pin the two boundaries where a
+functions.py (see docs/experiments.md). They pin the two boundaries where a
 refactor can silently change results: the filtered signal and the segmented
 beat tensor.
 

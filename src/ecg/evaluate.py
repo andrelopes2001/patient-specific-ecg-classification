@@ -1,6 +1,6 @@
 """Metrics and confusion matrices.
 
-Reimplements the thesis' ``metrics_from_confusion_matrix`` with the same
+Reimplements the ``metrics_from_confusion_matrix`` with the same
 definitions (micro / macro / weighted / per-class from a one-vs-rest breakdown
 of the confusion matrix) but without the 35-line duplicated early-return block.
 """
@@ -123,7 +123,7 @@ def compute_metrics(
 
 
 def metrics_table(metrics: Metrics) -> str:
-    """Render metrics as the text table the thesis reported."""
+    """Render metrics as a text table in the standard AAMI layout."""
     from tabulate import tabulate
 
     header = ["Metric", "Micro", "Macro", "Weighted"] + [

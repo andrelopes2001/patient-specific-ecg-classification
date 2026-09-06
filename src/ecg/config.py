@@ -1,8 +1,7 @@
 """Central configuration.
 
-Every magic number that was previously inline in the thesis notebooks lives
-here. Nothing in ``src/ecg`` should hardcode a sampling rate, window length or
-class name.
+Every tunable lives here. Nothing in ``src/ecg`` should hardcode a sampling
+rate, window length or class name.
 """
 
 from __future__ import annotations
@@ -90,7 +89,7 @@ class Config:
 
     # Global-model training. Class weighting and early stopping are available
     # but OFF by default: both improved results on held-out DS1 patients yet
-    # made them worse on DS2 (docs/experiments.md). The thesis settings win.
+    # made them worse on DS2 (docs/experiments.md). The simpler settings win.
     max_epochs: int = 10
     early_stopping_patience: int = 0        # 0 disables early stopping
     class_weight: bool = False

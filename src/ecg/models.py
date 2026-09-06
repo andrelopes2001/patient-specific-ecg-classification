@@ -1,9 +1,8 @@
 """Keras architectures.
 
-The MLP is the model the thesis shipped: its layer configuration was read back
-out of ``base_models/model_cGAN10k_MLP.h5`` to confirm which of the five
-``mlp_model`` variants scattered through ``validation.ipynb`` produced the saved
-weights. It is the one without dropout or L2.
+The MLP is the production model: 151 -> 128 -> 64 -> 4, no dropout, no weight
+decay. Its size is the point -- see docs/experiments.md for why larger models
+and convolutional variants were tried and rejected.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ def mlp(
     """Dense classifier: ``input_size -> 128 -> 64 -> n_classes``.
 
     With the defaults this is 27,972 parameters -- small enough to be the basis
-    of the thesis' low-latency argument.
+    of the low-latency argument.
     """
     keras = _keras()
     input_size = cfg.window_length if input_size is None else input_size

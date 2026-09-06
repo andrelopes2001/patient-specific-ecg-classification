@@ -1,7 +1,7 @@
 """Download the MIT-BIH Arrhythmia Database (mitdb) from PhysioNet.
 
-The thesis pipeline consumes per-record CSVs derived from the WFDB records.
-This script fetches the raw records only; `build_csv.py` derives the CSVs.
+The pipeline consumes per-record CSVs derived from the WFDB records. This
+script fetches the raw records only; `build_csv.py` derives the CSVs.
 
 Idempotent: records already present with a non-empty .dat/.hea/.atr triple are
 skipped. Run with --force to re-download everything.
@@ -13,9 +13,9 @@ import argparse
 import sys
 from pathlib import Path
 
-# The 48 records of the MIT-BIH Arrhythmia Database, as enumerated in the
-# thesis' data_import.ipynb. Records 102/104/107/217 are paced and are dropped
-# later by the AAMI convention, but they are downloaded for completeness.
+# The 48 records of the MIT-BIH Arrhythmia Database. Records 102/104/107/217
+# are paced and are excluded later by the AAMI convention, but they are
+# downloaded for completeness.
 RECORDS = [
     100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 111, 112,
     113, 114, 115, 116, 117, 118, 119, 121, 122, 123, 124, 200,

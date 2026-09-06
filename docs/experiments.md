@@ -1,7 +1,7 @@
 # Experiments
 
 Why the model is a 27,972-parameter MLP and why training departs from the
-thesis. Every number here comes from **held-out DS1 patients** — DS2 was used
+baseline. Every number here comes from **held-out DS1 patients** — DS2 was used
 once, for the final result, after these decisions were fixed.
 
 ## Selection protocol
@@ -68,7 +68,7 @@ Two changes looked like clear wins on the validation patients:
 | Early stopping (26–35 epochs) vs fixed 10 | **+0.030** |
 | Per-beat z-normalisation | −0.03 (rejected immediately) |
 
-The training loss was still falling at epoch 10, so the thesis schedule really
+The training loss was still falling at epoch 10, so the reference schedule really
 does stop short, and DS1 really is 90% class N. Both changes were adopted.
 
 **They then made DS2 worse.** Measured across the same three seeds, 5 minutes of
@@ -76,7 +76,7 @@ fine-tuning:
 
 | Configuration | Macro F1 (DS2) |
 |---|---|
-| Thesis settings — 10 epochs, no class weighting | **0.857 ± 0.009** |
+| Baseline — 10 epochs, no class weighting | **0.857 ± 0.009** |
 | Class weights + early stopping | 0.833 ± 0.011 |
 
 The 0.024 loss is wider than the seed spread, so it is not noise. Both changes
@@ -105,7 +105,7 @@ classes using only ~370 beats.
 
 ## Conclusion
 
-The thesis's architecture **and** its training schedule were both left unchanged.
+The baseline architecture **and** its training schedule were both left unchanged.
 Every attempt to improve on them — larger MLPs, three CNN variants, a BiLSTM,
 class weighting, early stopping, per-beat normalisation — either made no
 difference or made results worse.

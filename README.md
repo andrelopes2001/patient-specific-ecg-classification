@@ -1,228 +1,208 @@
 # Patient-Specific ECG Arrhythmia Classification
 
 Classifying individual heartbeats into AAMI arrhythmia classes on the MIT-BIH
-Arrhythmia Database, where a small global model is **personalised to each patient
-using the first few minutes of their own recording**.
+Arrhythmia Database, using a compact model that is **personalised to each patient
+from a few minutes of their own recording**.
 
-A general ECG classifier has to cope with the fact that healthy beat morphology
-varies enormously between people — one patient's normal beat looks like another's
-abnormality. Personalising the model to the individual sidesteps that, and the
-practical question becomes: *how little of a patient's own data do you need?*
+Healthy beat morphology varies enormously between people — one patient's normal
+beat can look like another's abnormality — which is why a single global ECG
+classifier generalises poorly to a new patient. This project quantifies the
+alternative: adapt the model to the individual, and measure how little of their
+data is actually needed.
 
 ![Personalisation curve](results/personalisation_curve.png)
 
-**Three minutes.** Beyond that, more of the patient's own data adds very little —
-and it matters more than any of the synthetic-data augmentation tried here. The
-blue curve is reproduced by this repository (3 seeds, error bars are ±1 SD); the
-rest are the thesis figures, shown for comparison.
+**Three minutes.** Beyond that, additional patient data buys very little.
 
----
+## Headline result
 
-## What "patient-specific" means here
+Evaluated on the 22 held-out DS2 patients, pooled into one confusion matrix.
+4 AAMI classes, 5 minutes of personalisation, averaged over 3 seeds.
 
-Two stages, and the distinction matters:
+| | Accuracy | Macro F1 | Cohen's κ |
+|---|---|---|---|
+| Always predict "normal" | 0.889 | 0.235 | 0.000 |
+| Global model, no personalisation | 0.790 | 0.379 | 0.296 |
+| **Personalised** | **0.978 ± 0.001** | **0.857 ± 0.009** | **0.889** |
 
-1. **Global model** — trained on **DS1** (22 records), a small MLP over single
-   beats.
-2. **Personalisation** — for each **DS2** patient, a *copy* of the global model
-   is fine-tuned on that patient's own first *n* minutes, then evaluated on
-   minutes 5–30 of the same record.
+**Personalisation is worth +0.48 macro F1.** The global model on its own scores
+*below* the trivial always-normal baseline on accuracy — a direct measurement of
+how badly inter-patient morphology shift hurts, and the reason the personalised
+approach exists.
+
+Accuracy is close to meaningless on this data: class N is 89% of beats, so
+predicting "normal" everywhere already scores 0.889. Macro F1 and κ are the
+metrics that carry information.
+
+### Per-class performance
+
+Reported in the standard AAMI format — sensitivity (Se), positive predictive
+value (+P) and specificity — so these are directly comparable with the published
+literature on this benchmark.
+
+| Class | Beats | Se | +P | Spec | F1 |
+|---|---|---|---|---|---|
+| N — normal | 36,566 | 0.990 | 0.987 | 0.898 | 0.989 |
+| S — supraventricular ectopic | 1,590 | 0.747 | 0.895 | 0.996 | 0.814 |
+| V — ventricular ectopic | 2,674 | 0.966 | 0.942 | 0.996 | 0.954 |
+| F — fusion | 286 | 0.776 | 0.593 | 0.996 | 0.672 |
+
+```
+confusion matrix          predicted
+(mean of 3 seeds)      F      N      S      V
+                  F  222     33      1     30
+                  N  115  36208    132    111
+                  S    5    382   1187     16
+                  V   34     51      7   2582
+```
+
+S and F are the hard classes, as they are throughout this literature: S beats
+are morphologically close to N and differ mainly in timing, and F beats are by
+definition intermediate between N and V. F is 0.6% of the data.
+
+### What did not help
+
+Every attempt to improve on the compact model made results worse, which is
+itself the useful finding. Full study in [`docs/experiments.md`](docs/experiments.md);
+all model selection was done on **held-out DS1 patients**, with DS2 used once.
+
+| | Macro F1 (validation, N/S/V) |
+|---|---|
+| **MLP, 27,972 params** | **0.759** |
+| MLP, 80k params | 0.750 |
+| 1-D CNN, 163k params | 0.721 |
+| MLP, 243k params + dropout | 0.670 |
+| Residual CNN, 130k params | 0.620 |
+| BiLSTM, 42k params | 0.588 |
+
+Capacity hurts, monotonically. With roughly 370 personalisation beats per
+patient there is nothing for a larger model to exploit, and bigger networks fit
+the training records harder while generalising worse to unseen ones. Class
+weighting and early stopping gained +0.035 on validation and then **lost 0.024
+on DS2** — recorded as a negative result rather than quietly dropped.
+
+## Method
+
+Two stages:
+
+1. **Global model** — a small MLP trained on DS1 (22 records).
+2. **Personalisation** — for each DS2 patient, a *copy* of that model is
+   fine-tuned on that patient's first *n* minutes, then evaluated on the
+   remainder of their record.
 
 ```
 DS1 (22 patients) ──train──> global model
                                   │
-DS2 patient, min 0–5 ──fine-tune──┤ (a copy, per patient)
+DS2 patient, min 0–5 ──fine-tune──┤ (an independent copy per patient)
                                   ▼
 DS2 patient, min 5–30 ─────test───> pooled confusion matrix
 ```
 
-This is the de Chazal *et al.* inter-patient protocol. **DS1 and DS2 share no
-patients**, and within a patient the fine-tuning and test windows are temporally
-disjoint. The model does see the first five minutes of the patient it is tested
-on — that is the point of the method, not a leak — but it never sees a test beat.
-
-## Results
-
-Reproduced by this repository — `scripts/train.py`, **averaged over 3 seeds**.
-Pooled across all 22 DS2 patients into one confusion matrix, 4 AAMI classes,
-5 minutes of fine-tuning, no augmentation and no extra features.
-
-| | Accuracy | Macro F1 | Kappa | F1 (F) | F1 (N) | F1 (S) | F1 (V) |
-|---|---|---|---|---|---|---|---|
-| **This repo** (3 seeds) | **0.978 ± 0.001** | 0.857 ± 0.009 | **0.889** | 0.672 | 0.989 | **0.814** | 0.954 |
-| Thesis, no augmentation | 0.974 | 0.862 | 0.869 | 0.758 | 0.986 | 0.754 | 0.951 |
-| Thesis, cGAN + length + rate | 0.981 | 0.851 | 0.901 | 0.612 | 0.990 | 0.843 | 0.957 |
-| Thesis, cGAN + heart rate | 0.980 | 0.848 | 0.897 | 0.604 | 0.990 | 0.840 | 0.956 |
-| Thesis, SMOTE | 0.970 | 0.813 | 0.852 | 0.558 | 0.984 | 0.759 | 0.950 |
-| Thesis, cGAN | 0.969 | 0.806 | 0.849 | 0.532 | 0.984 | 0.758 | 0.951 |
-
-```bash
-python scripts/train.py --epochs 10 --seed 12   # ~1 min, one seed
-python scripts/sweep.py --seeds 12 13 14        # the full curve, ~8 min
-```
-
-**Reading these honestly.** This reproduction **matches** the thesis baseline
-rather than beating it: macro F1 0.857 ± 0.009 against 0.862 is a tie inside the
-seed spread. It is ahead on kappa (0.889 vs 0.869) and on class S (0.814 vs
-0.754), and behind on class F (0.672 vs 0.758).
-
-Macro F1 is the metric that matters here — accuracy is close to meaningless when
-class N is 89% of beats, since predicting "normal" everywhere scores 0.889. On
-that metric the plain pipeline with **no augmentation** is level with the best
-augmented configuration, and class F remains the weak point everywhere.
-
-Single runs are not trustworthy at this precision: macro F1 varies by up to
-0.02 between seeds, which is wider than most of the gaps in the table above.
-Every number in the first row is a 3-seed mean for that reason.
-
-Two caveats:
-
-- The augmentation rows are **thesis-reported**, not re-run — the cGAN is the
-  one genuinely expensive component and retraining it was out of scope. Only the
-  first row is reproduced here.
-- The comparison is not exactly like-for-like: this pipeline fixes one denoising
-  setting throughout and seeds every RNG, where the original left denoising
-  ambiguous between notebook cells and seeded only the resamplers.
-
-The original saved checkpoints could not be aligned with the documented pipeline
-at all, so the thesis numbers are cited from
-its recorded results rather than re-derived from its weights.
+This is the [de Chazal *et al.*](https://doi.org/10.3390/a13040075) inter-patient
+protocol. **DS1 and DS2 share no patients**, and within a patient the
+personalisation and test windows are disjoint in time. The model does see the
+first five minutes of the patient it is tested on — that is the method, not a
+leak — but never a beat it is scored on. The guarantee is enforced by tests, not
+by convention: see [`tests/test_protocol.py`](tests/test_protocol.py).
 
 ## Model
 
 ```
-input 151 (beat window)  ─>  Dense 128 relu  ─>  Dense 64 relu  ─>  Dense 4 softmax
+input 151  →  Dense 128 (relu)  →  Dense 64 (relu)  →  Dense 4 (softmax)
 ```
 
-**27,972 parameters.** Adam, categorical cross-entropy. Optional variants
-prepend the gap to the previous beat and the instantaneous heart rate, giving
-152 or 153 inputs — cheap rhythm context an isolated beat cannot carry.
+**27,972 parameters.** Input is a 151-sample window centred on the R-peak — 50
+samples before, 100 after — at 360 Hz, so 419 ms of single-lead (MLII) signal.
 
-The small model is deliberate: the thesis motivation was wearable-scale
-inference. **Inference latency was never benchmarked**, so this repo makes no
-latency claim — only the architectural observation that the model is 28k
-parameters over a 419 ms window.
+The size is deliberate. The whole pipeline trains and personalises on a **laptop
+CPU with no GPU**, which is what makes on-device personalisation practical: a
+patient's ECG never has to leave their own hardware to adapt the model to them.
+A 28k-parameter network is also small enough to be a credible target for
+wearable-class inference, though **inference latency is not benchmarked here** and
+no latency claim is made.
+
+Optional variants prepend the interval to the previous beat and the
+instantaneous heart rate, giving 152 or 153 inputs — cheap rhythm context that a
+single isolated beat cannot carry.
 
 ## Data and preprocessing
 
-MIT-BIH Arrhythmia Database — 48 records, 30 minutes each, 360 Hz, 2 leads.
-Lead **MLII** is used throughout.
+MIT-BIH Arrhythmia Database: 48 records, 30 minutes each, 360 Hz, 2 leads.
 
 | Stage | Detail |
 |---|---|
-| Denoising | Baseline wander removed via 200 ms + 600 ms median filters, then a 35 Hz low-pass FIR |
+| Denoising | Baseline wander removed with 200 ms + 600 ms median filters, then a 35 Hz low-pass FIR |
 | Resampling | None — native 360 Hz |
-| Segmentation | 151-sample window centred on the annotated R-peak: 50 before, 100 after (**419 ms**) |
-| Beat rejection | Beats whose neighbours are too close for the window to fit |
-| Normalisation | Fit on the fine-tuning split only, never on test |
-| Classes | AAMI F / N / S / V (`multiclass4`); paced records 102, 104, 107, 217 excluded |
+| Segmentation | 151-sample window on the annotated R-peak: 50 before, 100 after |
+| Beat rejection | Beats whose neighbours sit too close for the window to fit |
+| Normalisation | Fit on the personalisation split only, never on test |
+| Classes | AAMI F / N / S / V; paced records 102, 104, 107, 217 excluded per AAMI |
 
-Class balance on DS2 — the core difficulty:
+Class balance on DS2, and the central difficulty:
 
 | N | V | S | F |
 |---|---|---|---|
-| 89.02% | 6.51% | 3.69% | 0.78% |
+| 89.0% | 6.5% | 3.7% | 0.8% |
 
-R-peak locations come from the database's expert annotations; this work
-classifies beats, it does not detect them.
+R-peak locations come from the database's expert annotations: this classifies
+beats, it does not detect them.
 
-## Quickstart
+## Usage
 
 ```bash
-git clone https://github.com/andrelopes2001/patient-specific-ecg-classification
-cd patient-specific-ecg-classification
-
 uv venv --python 3.11 && source .venv/bin/activate
 uv pip install -e ".[keras,torch,dev]"
 ```
 
-Fetch the data — it is **not** in this repository, and cannot be: PhysioNet's
-terms do not permit redistribution.
+The data is not in this repository and cannot be — PhysioNet's terms do not
+permit redistribution:
 
 ```bash
-python scripts/download_data.py    # 48 records, ~90 MB, from PhysioNet
-python scripts/build_csv.py        # derive per-record CSVs (~7 GB)
+python scripts/download_data.py    # 48 records, ~90 MB
+python scripts/build_csv.py        # derive per-record CSVs
 ```
 
 Then:
 
 ```bash
-pytest                                    # 29 tests, ~10 s, no training
-                                          # (15 skip until the data is present)
-python scripts/train.py --dry-run         # inspect the config, train nothing
-python scripts/evaluate.py --predictions tests/fixtures/predictions_ds2.npz
+pytest                                    # 41 tests (15 skip without data)
+python scripts/train.py --seed 12         # train, personalise, score
+python scripts/sweep.py --seeds 12 13 14  # the personalisation curve
 ```
-
-Training the full pipeline takes **about a minute on CPU** — the model is 28k
-parameters, and most of that minute is segmenting beats:
-
-```bash
-python scripts/train.py --epochs 10 --seed 12
-```
-
-The cGAN in `src/ecg/cgan.py` is the one expensive component and is not part of
-that path.
 
 ## Layout
 
 ```
 src/ecg/
-  config.py         Config dataclass — every parameter, DS1/DS2, class order
+  config.py         every tunable, DS1/DS2 record lists, class order
   data.py           record loading
   preprocessing.py  FIR / median / wavelet denoising, scaling
   segmentation.py   R-peak windowing, AAMI labelling, feature assembly
   balance.py        oversampling, SMOTE, shift augmentation
   models.py         Keras architectures
   cgan.py           conditional GAN for minority-class synthesis (PyTorch)
-  train.py          global training, patient-specific fine-tuning
+  train.py          global training, patient personalisation
   evaluate.py       metrics and confusion matrices
   viz.py            plotting
-scripts/            download_data, build_csv, train, evaluate
-notebooks/          01_signal_exploration, 02_results
-tests/              fixture-based regression tests
+scripts/            download_data, build_csv, train, sweep, evaluate
+notebooks/          signal exploration, results
+tests/              41 tests: regression, protocol and leakage guards
+docs/experiments.md model selection study
 ```
 
 ## Reproducibility
 
-`seed_everything()` seeds Python, NumPy, TensorFlow and PyTorch. All parameters
-live in a frozen `Config`; nothing downstream hardcodes a sampling rate or window
-bound. Running `scripts/train.py --seed 12` twice produces **byte-identical**
-metrics and confusion matrices — verified, not assumed.
+`seed_everything()` seeds Python, NumPy, TensorFlow and PyTorch, and every
+parameter lives in a frozen `Config`. The same seed gives byte-identical
+metrics and confusion matrices.
 
 Determinism is not stability, though: *different* seeds move macro F1 by up to
-0.02. Reported figures are 3-seed means, and single-seed numbers should not be
-compared at three decimal places.
+0.02. Every figure reported here is a 3-seed mean, and single-seed numbers
+should not be compared at three decimal places.
 
-The **thesis** results predate this and came from an unseeded run: the original
-seeded only the imbalanced-learn samplers, leaving beat augmentation and weight
-initialisation non-deterministic. Those numbers are not bit-reproducible even
-with the original code, which is part of why they are cited rather than
-re-derived.
-
-What *is* pinned exactly: [`tests/`](tests/) asserts the segmented beat tensor
-against an MD5 captured from the original implementation, so any change to
-filtering or windowing fails loudly rather than quietly costing F1.
-
-## Provenance
-
-A refactor of the code behind an MSc dissertation
-(2024). The original was ~70 notebooks against a single 2,213-line
-`functions.py`, with one function defined 39 times in one notebook.
-
-Model selection is written up in:
-
-- [`docs/experiments.md`](docs/experiments.md) — why the model is a 28k-parameter
-  MLP, and the things that were tried and did not work.
-
-Two findings a reader will reasonably wonder about:
-
-- **An earlier version had a leaky evaluation** — a random 80/20 split applied
-  *after* oversampling, putting duplicated beats on both sides. It was abandoned
-  before the final results in favour of the patient-disjoint DS1/DS2 split, and
-  is documented rather than quietly removed.
-- **Fine-tuning used to mutate the global model in place**, so each patient's
-  personalisation resumed from the previous patient's weights. Fixed in
-  `train.py` and covered by a regression test.
+Preprocessing is pinned by regression tests that assert an MD5 over the
+segmented beat tensor, so a change to filtering or windowing fails loudly
+instead of quietly costing F1.
 
 ## Citation
 

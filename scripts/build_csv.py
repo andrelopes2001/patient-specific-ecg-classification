@@ -1,4 +1,4 @@
-"""Derive the per-record CSVs the thesis pipeline consumes from WFDB records.
+"""Derive the per-record CSVs this pipeline consumes from WFDB records.
 
 Reimplements the original data-import notebook and
 the original data-merge notebook, which originally ran with the

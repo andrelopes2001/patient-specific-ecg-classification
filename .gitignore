@@ -57,7 +57,5 @@ desktop.ini
 !tests/fixtures/**/*.npz
 !tests/fixtures/**/*.csv
 
-# ---- Original source tree (kept locally, never published) ----
-
 # Per-run output; the tracked numbers live in results/*_metrics.csv
 results/metrics.json

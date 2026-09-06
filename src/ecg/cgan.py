@@ -1,7 +1,7 @@
 """Conditional GAN for minority-class beat synthesis (PyTorch).
 
 Trained per class to synthesise extra S, V and F beats, addressing the 89%/0.8%
-imbalance between N and F. Architecture as in the thesis: noise and one-hot
+imbalance between N and F. Architecture as follows: noise and one-hot
 class context are embedded separately, concatenated, then decoded to a beat.
 """
 

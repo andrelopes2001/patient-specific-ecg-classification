@@ -60,7 +60,7 @@ def beat_positions(record: Record, cfg: Config = DEFAULT) -> pd.DataFrame:
     # signal quality), and those occupy sample positions. Measuring gaps to the
     # nearest beat instead would widen them, letting ~25 extra beats per record
     # through the window filter below and silently changing the dataset. This
-    # matches the original thesis implementation.
+    # matches the reference implementation; see docs/experiments.md.
     peaks = record.annotated.dropna(subset=["Label"]).reset_index(drop=True)
 
     samples = peaks["Sample"]

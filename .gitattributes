@@ -1,1 +1,8 @@
 * text=auto eol=lf
+
+# The notebooks are documentation: they import from src/ecg and define no
+# functions of their own. Their size is embedded figure output, not code, and
+# without this they dominate the language statistics.
+*.ipynb linguist-documentation
+notebooks/** linguist-documentation
+docs/** linguist-documentation

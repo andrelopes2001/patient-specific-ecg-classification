@@ -109,9 +109,8 @@ def shift_augment(
     Picks a random side and a random shift of up to half that side's window,
     then re-extracts the window from the original signal at the shifted centre.
 
-    Unlike the original, this takes an explicit ``rng``. The thesis version used
-    unseeded module-level ``random``/``np.random`` calls, so the augmented set
-    -- and therefore every model trained on it -- differed between runs.
+    Takes an explicit ``rng`` so the augmented set is reproducible; an unseeded
+    implementation makes every model trained on it differ between runs.
     """
     rng = rng or np.random.default_rng(cfg.seed)
 

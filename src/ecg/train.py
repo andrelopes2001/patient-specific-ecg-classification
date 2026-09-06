@@ -101,7 +101,7 @@ def evaluate_patient_specific(
     """Run the full patient-specific protocol and pool the predictions.
 
     Metrics are computed over all patients' test beats pooled into one
-    confusion matrix, which is what the thesis reported.
+    confusion matrix, which is the AAMI reporting convention.
     """
     results: list[PatientResult] = []
 
@@ -142,7 +142,7 @@ def train_global(
 ):
     """Train the global model on DS1.
 
-    Defaults reproduce the thesis: a fixed 10 epochs, no class weighting.
+    Defaults: a fixed 10 epochs, no class weighting.
 
     ``cfg.class_weight`` and ``cfg.early_stopping_patience`` enable
     inverse-frequency weighting and early stopping. Both raised macro F1 on
