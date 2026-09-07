@@ -103,6 +103,48 @@ per-patient fine-tuning stage is not, so the two stages optimise different
 objectives; personalisation then has to undo the global model's bias toward rare
 classes using only ~370 beats.
 
+## Class balancing
+
+DS1 is 90% class N. Two rebalancing strategies were implemented and evaluated on
+DS2 over 3 seeds — full numbers in `results/balance_comparison.csv` and
+`results/global_model_comparison.csv`.
+
+| Balancing | Global only | Personalised | Cost |
+|---|---|---|---|
+| None | 0.387 ± 0.002 | **0.857 ± 0.009** | 36 s |
+| cGAN | **0.409 ± 0.023** | 0.854 ± 0.017 | 262 s |
+| SMOTE | 0.364 ± 0.028 | 0.813 ± 0.012 | 74 s |
+
+The cGAN beats SMOTE by 0.041 macro F1 and is the only strategy that improves
+the patient-independent model. Neither improves the personalised result, because
+fine-tuning on a patient's own data already adapts to their class distribution.
+
+### Making the GAN train
+
+The first implementation did not learn: both losses sat at ln(2) for up to
+60,000 steps under SGD and Adam alike. The cause was scaling. The generator's
+output layer is a sigmoid, so beats must be mapped to [0, 1]; scaling by the
+observed min and max left real beats occupying 37% of that interval with a
+standard deviation of 0.06, against an untrained generator emitting across the
+whole range. Percentile clipping fixed it:
+
+| Scaling | Discriminator loss | Generated-beat quality |
+|---|---|---|
+| Global min-max | 0.693 (chance) | 0.865 |
+| 0.5–99.5 percentile | 0.638 | 0.339 |
+| 2–98 percentile | 0.595 | 0.192 |
+
+Quality is mean absolute deviation from the real per-class mean beat; a
+generator that always emitted the global mean beat would score 0.146. Two other
+changes were needed: Adam (2e-4, β₁ 0.5) rather than SGD, which did not converge
+at any step count tried, and 20,000 minibatch steps rather than 1,000.
+
+The generator reproduces R-peak timing and amplitude for classes F, N and V but
+fails on S, and all synthetic beats carry high-frequency artefacts — see
+`results/cgan_training.png`. It is a functioning conditional generator rather
+than a convincing one, which matches its performance: better than SMOTE, not
+better than leaving the data alone.
+
 ## Conclusion
 
 The baseline architecture **and** its training schedule were both left unchanged.

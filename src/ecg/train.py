@@ -139,6 +139,8 @@ def train_global(
     cfg: Config = DEFAULT,
     epochs: int | None = None,
     extra_features: tuple[str, ...] = (),
+    balance: str = "none",
+    balance_kwargs: dict | None = None,
 ):
     """Train the global model on DS1.
 
@@ -152,8 +154,22 @@ def train_global(
     """
     import keras
 
+    from .balance import rebalance
+
     epochs = cfg.max_epochs if epochs is None else epochs
     train_df = df[df["Patient"].isin(DS1)]
+
+    if balance != "none":
+        if extra_features:
+            raise ValueError(
+                "balancing operates on beat windows only; it cannot be combined "
+                "with extra scalar features"
+            )
+        # Balancing applies to the global training set only. The per-patient
+        # personalisation split is never resampled: it is what the deployed
+        # system would actually see.
+        train_df = rebalance(train_df, balance, cfg, **(balance_kwargs or {}))
+
     X, y = to_features(train_df, extra_features, cfg)
 
     callbacks = []

@@ -112,3 +112,132 @@ def build(cfg: Config = DEFAULT, device: str | torch.device = "cpu"):
         Generator(latent_dim=length, output_dim=length).to(device),
         Discriminator(input_dim=length).to(device),
     )
+
+
+class _MinMax:
+    """Scale beats into [0, 1] and back, using percentiles rather than extremes.
+
+    The generator ends in a sigmoid, so it can only emit values in [0, 1] --
+    while raw beats are in millivolts and frequently negative. Some scaling is
+    therefore mandatory.
+
+    Scaling by the true min and max is what the obvious implementation does, and
+    it does not work: beat amplitudes have long tails (-3.2 to +3.9 mV, but the
+    1st-99th percentile is only [-0.77, +1.85]), so real beats end up occupying
+    37% of the output range with a standard deviation of 0.06. An untrained
+    generator emits across the whole interval, the two distributions barely
+    overlap in scale, and *neither* network learns -- both losses sit at ln(2)
+    indefinitely.
+
+    Clipping at percentiles spreads the real beats across the sigmoid's range.
+    Measured effect on generated-beat quality (mean absolute deviation from the
+    real per-class mean beat, lower is better; 0.146 is what a constant scores):
+
+        global min-max   0.865   discriminator loss 0.693 (chance)
+        0.5-99.5 pct     0.339   discriminator loss 0.638
+        2-98 pct         0.192   discriminator loss 0.595
+
+    The cost is clipping: beats outside the percentile range saturate.
+    """
+
+    def __init__(self, lo_pct: float = 2.0, hi_pct: float = 98.0):
+        self.lo_pct = lo_pct
+        self.hi_pct = hi_pct
+
+    def fit(self, X: np.ndarray) -> "_MinMax":
+        self.lo = float(np.percentile(X, self.lo_pct))
+        self.hi = float(np.percentile(X, self.hi_pct))
+        self.span = max(self.hi - self.lo, 1e-12)
+        return self
+
+    def forward(self, X: np.ndarray) -> np.ndarray:
+        return np.clip((X - self.lo) / self.span, 0.0, 1.0)
+
+    def inverse(self, X: np.ndarray) -> np.ndarray:
+        return X * self.span + self.lo
+
+
+def train_cgan(
+    X: np.ndarray,
+    y: np.ndarray,
+    cfg: Config = DEFAULT,
+    epochs: int = 20_000,
+    batch_size: int = 128,
+    learning_rate: float = 2e-4,
+    device: str | torch.device = "cpu",
+    verbose: bool = False,
+):
+    """Train the conditional GAN on real beats.
+
+    Standard alternating GAN training with BCE loss: the discriminator is
+    updated on a real and a fake batch, then the generator is updated to fool
+    it. Returns ``(generator, scaler, losses)``.
+
+    ``epochs`` counts minibatch steps, not passes over the data. Adam at 2e-4
+    with beta1 0.5 is the usual GAN setting; SGD at 0.1 (which an earlier
+    version used) does not converge here at any step count tried.
+    """
+    torch.manual_seed(cfg.seed)
+    scaler = _MinMax().fit(X)
+    Xs = scaler.forward(X).astype(np.float32)
+
+    generator, discriminator = build(cfg, device)
+    opt_g = torch.optim.Adam(generator.parameters(), lr=learning_rate,
+                             betas=(0.5, 0.999))
+    opt_d = torch.optim.Adam(discriminator.parameters(), lr=learning_rate,
+                             betas=(0.5, 0.999))
+    schedulers = []
+    bce = nn.BCELoss()
+    rng = torch.Generator().manual_seed(cfg.seed)
+    losses = {"generator": [], "discriminator": []}
+
+    ones = torch.ones(batch_size, device=device)
+    zeros = torch.zeros(batch_size, device=device)
+
+    for epoch in range(epochs):
+        # --- discriminator: real beats are 1, generated beats are 0 ---
+        real, context = minibatch(Xs, y, batch_size, device, rng, cfg.n_classes)
+        if len(real) < batch_size:
+            continue
+        noise = sample_noise(batch_size, generator.latent_dim, device)
+        fake = generator(noise, context).detach()
+
+        loss_d = 0.5 * (
+            bce(discriminator(real, context).reshape(batch_size), ones)
+            + bce(discriminator(fake, context).reshape(batch_size), zeros)
+        )
+        opt_d.zero_grad()
+        loss_d.backward()
+        opt_d.step()
+
+        # --- generator: try to make the discriminator answer 1 ---
+        noise = sample_noise(batch_size, generator.latent_dim, device)
+        _, context = minibatch(Xs, y, batch_size, device, rng, cfg.n_classes)
+        loss_g = bce(
+            discriminator(generator(noise, context), context).reshape(batch_size), ones
+        )
+        opt_g.zero_grad()
+        loss_g.backward()
+        opt_g.step()
+
+        for scheduler in schedulers:
+            scheduler.step()
+
+        losses["discriminator"].append(float(loss_d))
+        losses["generator"].append(float(loss_g))
+        if verbose and (epoch + 1) % 5000 == 0:
+            print(f"    epoch {epoch + 1}: D={float(loss_d):.3f} G={float(loss_g):.3f}",
+                  flush=True)
+
+    return generator, scaler, losses
+
+
+def synthesise(
+    generator: Generator,
+    scaler: _MinMax,
+    labels: np.ndarray,
+    device: str | torch.device = "cpu",
+    n_classes: int = len(CLASSES),
+) -> np.ndarray:
+    """Generate beats for the given class labels, in the original units."""
+    return scaler.inverse(generate(generator, labels, device, n_classes))

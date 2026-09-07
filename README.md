@@ -60,6 +60,24 @@ S and F are the hard classes, as they are throughout this literature: S beats
 are morphologically close to N and differ mainly in timing, and F beats are by
 definition intermediate between N and V. F is 0.6% of the data.
 
+### Comparison with published work
+
+Direct comparison on this benchmark needs care: published patient-specific
+results are usually reported over 5 AAMI classes (including the "unknown" class
+Q) while this project uses 4, and per-class accuracy is often averaged across
+records rather than pooled. The figures below are the closest like-for-like
+available — same database, same patient-specific protocol, same per-class
+one-vs-rest metrics.
+
+| | SVEB (S) accuracy | SVEB F1 | VEB (V) accuracy | VEB F1 |
+|---|---|---|---|---|
+| 1D Self-ONN, [Malik et al. 2021](https://arxiv.org/abs/2110.02215) | 0.980 | 0.766 | 0.990 | 0.937 |
+| **This project** | **0.988** | **0.814** | **0.995** | **0.954** |
+
+Ahead on both classes, with the caveats above and with a 27,972-parameter model.
+Per-class results are reported in the standard Se / +P / specificity format
+above precisely so they can be checked against any paper on this benchmark.
+
 ### What did not help
 
 Every attempt to improve on the compact model made results worse, which is
@@ -80,6 +98,71 @@ patient there is nothing for a larger model to exploit, and bigger networks fit
 the training records harder while generalising worse to unseen ones. Class
 weighting and early stopping gained +0.035 on validation and then **lost 0.024
 on DS2** — recorded as a negative result rather than quietly dropped.
+
+## Class imbalance: SMOTE vs a conditional GAN
+
+DS1 is 90% class N and 0.8% class F, so the obvious move is to rebalance the
+training set. Two approaches are implemented and evaluated here — SMOTE, the
+standard interpolation baseline, and a conditional GAN that learns to generate
+beats of a requested class.
+
+Both are measured the same way as everything else: 22 held-out DS2 patients,
+3 seeds, identical test beats.
+
+| Balancing | Global model alone | After personalisation | F1 (F) | F1 (S) | F1 (V) |
+|---|---|---|---|---|---|
+| None | 0.387 ± 0.002 | **0.857 ± 0.009** | 0.672 | 0.814 | **0.954** |
+| **cGAN** | **0.409 ± 0.023** | 0.854 ± 0.017 | 0.655 | **0.824** | 0.949 |
+| SMOTE | 0.364 ± 0.028 | 0.813 ± 0.012 | 0.553 | 0.785 | 0.931 |
+
+*(macro F1; "global model alone" is the patient-independent model with no
+fine-tuning, on the same DS2 beats)*
+
+Three results:
+
+1. **The cGAN clearly beats SMOTE** — +0.041 macro F1 after personalisation and
+   better on every class. SMOTE is also unstable: one seed collapsed to 0.325
+   global-only macro F1, giving it 15× the variance of the unbalanced baseline.
+2. **Only the cGAN improves the general model** (+0.021 over no balancing, while
+   SMOTE degrades it by 0.023). Two of three seeds beat the baseline clearly;
+   this is roughly a 1σ effect, so it is a direction rather than a proven margin.
+3. **Neither helps once the model is personalised.** cGAN and no-balancing are
+   tied to within a third of the cGAN's own seed spread.
+
+The reason is the interesting part: **personalisation already solves the
+imbalance**. Fine-tuning on a patient's own five minutes adapts the model to
+that patient's actual class mix, so globally rebalancing DS1 corrects a problem
+that the next stage was going to correct anyway — and SMOTE's synthetic
+interpolants actively distort the prior that fine-tuning must then undo.
+
+Even with balancing, the global model reaches only 0.409 macro F1 at ~0.82
+accuracy, still short of the 0.889 accuracy of predicting "normal" everywhere.
+Rebalancing moves a patient-independent classifier from unusable to marginally
+less unusable; it is not a substitute for adaptation.
+
+![cGAN training and generated beats](results/cgan_training.png)
+
+Getting the GAN to train at all required fixing the scaling. The generator ends
+in a sigmoid, so beats must be mapped into [0, 1] — but scaling by the true min
+and max puts real beats in 37% of that range with a standard deviation of 0.06,
+and *neither* network learns: both losses sit at ln 2 indefinitely. Clipping at
+the 2nd–98th percentiles instead spreads the data across the range, and the
+discriminator starts learning (loss falls to ~0.61). Measured effect on
+generated-beat quality, as mean absolute deviation from the real per-class mean
+beat — a constant scores 0.146:
+
+| Scaling | Discriminator loss | Quality |
+|---|---|---|
+| Global min-max | 0.693 (chance) | 0.865 |
+| 0.5–99.5 percentile | 0.638 | 0.339 |
+| **2–98 percentile** | **0.595** | **0.192** |
+
+The right-hand panels show where it succeeds and where it does not: the
+generator reproduces R-peak timing and amplitude for F, N and V, but class S
+(n=936) comes out as noise, and every synthetic beat carries high-frequency
+artefacts the real signal does not have. It is a working conditional generator,
+not a convincing one — which is consistent with it beating SMOTE without
+beating the unbalanced baseline.
 
 ## Method
 
@@ -165,9 +248,11 @@ python scripts/build_csv.py        # derive per-record CSVs
 Then:
 
 ```bash
-pytest                                    # 41 tests (15 skip without data)
-python scripts/train.py --seed 12         # train, personalise, score
-python scripts/sweep.py --seeds 12 13 14  # the personalisation curve
+pytest                                       # 41 tests (15 skip without data)
+python scripts/train.py --seed 12            # train, personalise, score
+python scripts/train.py --balance cgan       # with cGAN-synthesised beats
+python scripts/train.py --balance smote      # with SMOTE
+python scripts/sweep.py --seeds 12 13 14     # the personalisation curve
 ```
 
 ## Layout
@@ -187,7 +272,8 @@ src/ecg/
 scripts/            download_data, build_csv, train, sweep, evaluate
 notebooks/          signal exploration, results
 tests/              41 tests: regression, protocol and leakage guards
-docs/experiments.md model selection study
+docs/experiments.md model selection and balancing studies
+results/            metrics, curves and figures (all regenerable)
 ```
 
 ## Reproducibility

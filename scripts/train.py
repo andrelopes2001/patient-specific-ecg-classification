@@ -29,7 +29,12 @@ def main() -> int:
                    help="enable inverse-frequency class weighting "
                         "(measured worse on DS2; see docs/experiments.md)")
     p.add_argument("--balance", default="none",
-                   choices=["none", "oversample", "smote"])
+                   choices=["none", "oversample", "smote", "cgan"],
+                   help="rebalance the DS1 training set before global training")
+    p.add_argument("--cgan-epochs", type=int, default=20_000,
+                   help="cGAN minibatch steps when --balance cgan")
+    p.add_argument("--cgan-per-class", type=int, default=10_000,
+                   help="synthetic beats per class when --balance cgan")
     p.add_argument("--train-minutes", type=int, default=5)
     p.add_argument("--seed", type=int, default=12)
     p.add_argument("--interim-dir", type=Path, default=Path("data/interim"))
@@ -69,7 +74,13 @@ def main() -> int:
         print(f"  {len(df_train):,} beats")
 
         print(f"training global model (<={cfg.max_epochs} epochs) ...")
-        model, hist = train_global(df_train, model, cfg)
+        balance_kwargs = ({"epochs": args.cgan_epochs,
+                           "n_per_class": args.cgan_per_class}
+                          if args.balance == "cgan" else {})
+        if args.balance != "none":
+            print(f"rebalancing DS1 with {args.balance} ...")
+        model, hist = train_global(df_train, model, cfg, balance=args.balance,
+                                   balance_kwargs=balance_kwargs)
         print(f"  stopped after {len(hist.history['loss'])} epochs, "
               f"final loss {hist.history['loss'][-1]:.4f}")
 

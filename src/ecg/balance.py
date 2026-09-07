@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .config import DEFAULT, Config
+from .config import CLASSES, DEFAULT, Config
 
 
 def balanced_class_weights(targets: np.ndarray, n_classes: int = 4) -> dict[int, float]:
@@ -160,12 +160,71 @@ def shift_augment(
     return pd.concat([base, augmented], ignore_index=True)
 
 
+def cgan_oversample(
+    df: pd.DataFrame,
+    cfg: Config = DEFAULT,
+    epochs: int = 20_000,
+    n_per_class: int | None = 10_000,
+    device: str = "cpu",
+    verbose: bool = False,
+    return_history: bool = False,
+):
+    """Balance the classes with beats synthesised by a conditional GAN.
+
+    The GAN is trained on the real beats, then asked for synthetic beats of each
+    minority class. Unlike SMOTE, which can only interpolate between existing
+    beats, the generator can in principle produce morphologies absent from the
+    training set.
+
+    ``n_per_class`` caps the target count per class. Balancing all the way to
+    the majority class means synthesising ~45,000 fusion beats from 399 real
+    ones -- a lot of extrapolation from very little signal, and it quadruples
+    the downstream training set. ``None`` restores full balancing.
+    """
+    from .cgan import synthesise, train_cgan
+
+    beats = np.stack(df["beat"].to_numpy())
+    class_index = {name: i for i, name in enumerate(CLASSES)}
+    targets = df["Label"].map(class_index).to_numpy()
+
+    generator, scaler, history = train_cgan(
+        beats, targets, cfg, epochs=epochs, device=device, verbose=verbose
+    )
+
+    counts = np.bincount(targets, minlength=len(CLASSES))
+    target_n = int(counts.max()) if n_per_class is None else int(n_per_class)
+    synthetic_beats, synthetic_labels = [], []
+    for index, count in enumerate(counts):
+        shortfall = target_n - int(count)
+        if count == 0 or shortfall <= 0:
+            continue
+        labels = np.full(shortfall, index)
+        synthetic_beats.append(synthesise(generator, scaler, labels, device))
+        synthetic_labels.append(labels)
+
+    if not synthetic_beats:
+        out = df.assign(synthetic=False)
+        return (out, history) if return_history else out
+
+    generated = np.vstack(synthetic_beats)
+    generated_labels = np.concatenate(synthetic_labels)
+    extra = pd.DataFrame({
+        "Label": [CLASSES[i] for i in generated_labels],
+        "beat": list(generated),
+        "synthetic": True,
+    })
+    original = df.assign(synthetic=False)
+    out = pd.concat([original, extra], ignore_index=True)
+    return (out, history) if return_history else out
+
+
 STRATEGIES = {
     "none": lambda df, cfg=DEFAULT, **kw: df,
     "oversample": lambda df, cfg=DEFAULT, n_samples=None, **kw: random_oversample(
         df, n_samples, cfg
     ),
     "smote": lambda df, cfg=DEFAULT, **kw: smote(df, cfg),
+    "cgan": lambda df, cfg=DEFAULT, **kw: cgan_oversample(df, cfg, **kw),
 }
 
 
