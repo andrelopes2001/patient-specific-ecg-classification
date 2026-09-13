@@ -10,6 +10,9 @@ classifier generalises poorly to a new patient. This project quantifies the
 alternative: adapt the model to the individual, and measure how little of their
 data is actually needed.
 
+The research was carried out in 2024; the code was cleaned up and the results
+re-derived in this repository in 2026.
+
 ![Personalisation curve](results/personalisation_curve.png)
 
 **Three minutes.** Beyond that, additional patient data buys very little.
@@ -99,14 +102,12 @@ the training records harder while generalising worse to unseen ones. Class
 weighting and early stopping gained +0.035 on validation and then **lost 0.024
 on DS2** — recorded as a negative result rather than quietly dropped.
 
-## Class imbalance: SMOTE vs a conditional GAN
+## Class imbalance
 
 DS1 is 90% class N and 0.8% class F, so the obvious move is to rebalance the
-training set. Two approaches are implemented and evaluated here — SMOTE, the
-standard interpolation baseline, and a conditional GAN that learns to generate
-beats of a requested class.
-
-Both are measured the same way as everything else: 22 held-out DS2 patients,
+training set. Two approaches were tried: SMOTE, the standard interpolation
+baseline, and a conditional GAN (cGAN) that generates beats of a requested
+class. Both were measured like everything else: 22 held-out DS2 patients,
 3 seeds, identical test beats.
 
 | Balancing | Global model alone | After personalisation | F1 (F) | F1 (S) | F1 (V) |
@@ -118,51 +119,39 @@ Both are measured the same way as everything else: 22 held-out DS2 patients,
 *(macro F1; "global model alone" is the patient-independent model with no
 fine-tuning, on the same DS2 beats)*
 
-Three results:
+The cGAN beats SMOTE at both stages, and is the only method that nudges the
+global model up (+0.021, about one seed standard deviation). After
+personalisation, though, it only ties no balancing. Its generated beats are
+noisy and weakest for class S, so it needs serious work — class-balanced
+training, and a check that generated beats actually vary with the requested
+class and the noise input — before synthetic data can add real information.
+Details are in [`docs/experiments.md`](docs/experiments.md).
 
-1. **The cGAN clearly beats SMOTE** — +0.041 macro F1 after personalisation and
-   better on every class. SMOTE is also unstable: one seed collapsed to 0.325
-   global-only macro F1, giving it 15× the variance of the unbalanced baseline.
-2. **Only the cGAN improves the general model** (+0.021 over no balancing, while
-   SMOTE degrades it by 0.023). Two of three seeds beat the baseline clearly;
-   this is roughly a 1σ effect, so it is a direction rather than a proven margin.
-3. **Neither helps once the model is personalised.** cGAN and no-balancing are
-   tied to within a third of the cGAN's own seed spread.
-
-The reason is the interesting part: **personalisation already solves the
-imbalance**. Fine-tuning on a patient's own five minutes adapts the model to
-that patient's actual class mix, so globally rebalancing DS1 corrects a problem
-that the next stage was going to correct anyway — and SMOTE's synthetic
+Why neither method helps after personalisation is the interesting part:
+**personalisation already corrects the imbalance**. Fine-tuning on a patient's first five minutes adapts the model to
+the class mix seen in that window, so globally rebalancing DS1 corrects a
+problem that the next stage was going to correct anyway — and SMOTE's synthetic
 interpolants actively distort the prior that fine-tuning must then undo.
+
+The global model still matters: it is the only source of knowledge about
+classes a patient has not shown yet. Only 3 of the 22 test patients show all
+four classes in their first five minutes.
+
+**Limitation.** Personalisation adapts to the classes seen during calibration,
+and largely overwrites the rest. Where S beats first appear only after the first
+five minutes — almost entirely one record, 222 — detection is low. Two things
+compound: fine-tuning to near-zero loss on a window with no S beats teaches the
+model that this patient has none, and S differs from N mainly in timing and
+P-wave shape, which a single 419 ms beat window carries only weakly, so the
+global model's knowledge of S is fragile to begin with. V beats, which are
+morphologically distinct, survive much better. Keeping fine-tuning closer to the
+global model, for example by replaying DS1 minority beats during fine-tuning, is
+the natural next step.
 
 Even with balancing, the global model reaches only 0.409 macro F1 at ~0.82
 accuracy, still short of the 0.889 accuracy of predicting "normal" everywhere.
 Rebalancing moves a patient-independent classifier from unusable to marginally
 less unusable; it is not a substitute for adaptation.
-
-![cGAN training and generated beats](results/cgan_training.png)
-
-Getting the GAN to train at all required fixing the scaling. The generator ends
-in a sigmoid, so beats must be mapped into [0, 1] — but scaling by the true min
-and max puts real beats in 37% of that range with a standard deviation of 0.06,
-and *neither* network learns: both losses sit at ln 2 indefinitely. Clipping at
-the 2nd–98th percentiles instead spreads the data across the range, and the
-discriminator starts learning (loss falls to ~0.61). Measured effect on
-generated-beat quality, as mean absolute deviation from the real per-class mean
-beat — a constant scores 0.146:
-
-| Scaling | Discriminator loss | Quality |
-|---|---|---|
-| Global min-max | 0.693 (chance) | 0.865 |
-| 0.5–99.5 percentile | 0.638 | 0.339 |
-| **2–98 percentile** | **0.595** | **0.192** |
-
-The right-hand panels show where it succeeds and where it does not: the
-generator reproduces R-peak timing and amplitude for F, N and V, but class S
-(n=936) comes out as noise, and every synthetic beat carries high-frequency
-artefacts the real signal does not have. It is a working conditional generator,
-not a convincing one — which is consistent with it beating SMOTE without
-beating the unbalanced baseline.
 
 ## Method
 
@@ -229,66 +218,6 @@ Class balance on DS2, and the central difficulty:
 
 R-peak locations come from the database's expert annotations: this classifies
 beats, it does not detect them.
-
-## Usage
-
-```bash
-uv venv --python 3.11 && source .venv/bin/activate
-uv pip install -e ".[keras,torch,dev]"
-```
-
-The data is not in this repository and cannot be — PhysioNet's terms do not
-permit redistribution:
-
-```bash
-python scripts/download_data.py    # 48 records, ~90 MB
-python scripts/build_csv.py        # derive per-record CSVs
-```
-
-Then:
-
-```bash
-pytest                                       # 41 tests (15 skip without data)
-python scripts/train.py --seed 12            # train, personalise, score
-python scripts/train.py --balance cgan       # with cGAN-synthesised beats
-python scripts/train.py --balance smote      # with SMOTE
-python scripts/sweep.py --seeds 12 13 14     # the personalisation curve
-```
-
-## Layout
-
-```
-src/ecg/
-  config.py         every tunable, DS1/DS2 record lists, class order
-  data.py           record loading
-  preprocessing.py  FIR / median / wavelet denoising, scaling
-  segmentation.py   R-peak windowing, AAMI labelling, feature assembly
-  balance.py        oversampling, SMOTE, shift augmentation
-  models.py         Keras architectures
-  cgan.py           conditional GAN for minority-class synthesis (PyTorch)
-  train.py          global training, patient personalisation
-  evaluate.py       metrics and confusion matrices
-  viz.py            plotting
-scripts/            download_data, build_csv, train, sweep, evaluate
-notebooks/          signal exploration, results
-tests/              41 tests: regression, protocol and leakage guards
-docs/experiments.md model selection and balancing studies
-results/            metrics, curves and figures (all regenerable)
-```
-
-## Reproducibility
-
-`seed_everything()` seeds Python, NumPy, TensorFlow and PyTorch, and every
-parameter lives in a frozen `Config`. The same seed gives byte-identical
-metrics and confusion matrices.
-
-Determinism is not stability, though: *different* seeds move macro F1 by up to
-0.02. Every figure reported here is a 3-seed mean, and single-seed numbers
-should not be compared at three decimal places.
-
-Preprocessing is pinned by regression tests that assert an MD5 over the
-segmented beat tensor, so a change to filtering or windowing fails loudly
-instead of quietly costing F1.
 
 ## Citation
 
