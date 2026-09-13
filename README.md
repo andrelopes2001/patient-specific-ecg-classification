@@ -1,5 +1,7 @@
 # Patient-Specific ECG Arrhythmia Classification
 
+[![CI](https://github.com/andrelopes2001/patient-specific-ecg-classification/actions/workflows/ci.yml/badge.svg)](https://github.com/andrelopes2001/patient-specific-ecg-classification/actions/workflows/ci.yml)
+
 Classifying individual heartbeats into AAMI arrhythmia classes on the MIT-BIH
 Arrhythmia Database, using a compact model that is **personalised to each patient
 from a few minutes of their own recording**.
@@ -229,6 +231,11 @@ Class balance on DS2, and the central difficulty:
 
 R-peak locations come from the database's expert annotations: this classifies
 beats, it does not detect them.
+
+## Reproducing
+
+Data download, environment and the commands behind every table above are in
+[`docs/experiments.md`](docs/experiments.md#reproducing).
 
 ## Citation
 
