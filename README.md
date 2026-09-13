@@ -137,16 +137,27 @@ The global model still matters: it is the only source of knowledge about
 classes a patient has not shown yet. Only 3 of the 22 test patients show all
 four classes in their first five minutes.
 
-**Limitation.** Personalisation adapts to the classes seen during calibration,
-and largely overwrites the rest. Where S beats first appear only after the first
-five minutes — almost entirely one record, 222 — detection is low. Two things
-compound: fine-tuning to near-zero loss on a window with no S beats teaches the
-model that this patient has none, and S differs from N mainly in timing and
-P-wave shape, which a single 419 ms beat window carries only weakly, so the
-global model's knowledge of S is fragile to begin with. V beats, which are
-morphologically distinct, survive much better. Keeping fine-tuning closer to the
-global model, for example by replaying DS1 minority beats during fine-tuning, is
-the natural next step.
+**Limitation.** Personalisation detects S beats well only when the patient
+shows plenty of them during calibration — in this test set, one record (232).
+In the other patients with S beats, eight of whom show none in their first five
+minutes and six only one to four, most are missed. Fine-tuning to near-zero loss
+on a window with few or no S beats teaches the model this patient has none, and
+S differs from N mainly in timing and P-wave shape, which a single 419 ms beat
+window carries only weakly, so the global model's knowledge of S is fragile to
+begin with. V beats, which are morphologically distinct, survive much better.
+
+Two directions follow. First, *when* the calibration data is recorded matters:
+the one patient whose calibration window contained many S beats is also the one
+where S detection is near-perfect, which suggests a calibration period that
+captures several arrhythmia types is worth far more than an arbitrary first
+five minutes — though with a single such patient here, that is an indication
+rather than a measured effect. Second, fine-tuning need not rely on the
+patient's own recording alone: augmenting the calibration beats with synthetic
+beats of the classes the patient has not shown would stop fine-tuning from
+erasing them. Replaying real DS1 beats is the simple version; a mature
+conditional GAN that generates those classes in the patient's own morphology is
+where generative augmentation could pay off far more than it does for global
+rebalancing.
 
 Even with balancing, the global model reaches only 0.409 macro F1 at ~0.82
 accuracy, still short of the 0.889 accuracy of predicting "normal" everywhere.
