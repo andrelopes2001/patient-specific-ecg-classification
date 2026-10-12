@@ -1,0 +1,5 @@
+format,size_kb,batch1_median_us,batch1_p99_us,batch256_beats_per_s,threads,cpu,os,runtime
+keras_fp32,352.8,1203.2,1416.3,142916,tf default,AMD Ryzen 7 260 w/ Radeon 780M Graphics,Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39,keras 3.15.1
+onnx_fp32,110.9,5.1,9.0,2511773,1,AMD Ryzen 7 260 w/ Radeon 780M Graphics,Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39,onnxruntime 1.31.0
+onnx_int8_static,34.8,7.4,16.5,4078056,1,AMD Ryzen 7 260 w/ Radeon 780M Graphics,Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39,onnxruntime 1.31.0
+onnx_int8_dynamic,33.1,6.1,14.2,5021921,1,AMD Ryzen 7 260 w/ Radeon 780M Graphics,Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39,onnxruntime 1.31.0

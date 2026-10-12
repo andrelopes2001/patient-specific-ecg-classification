@@ -88,6 +88,7 @@ class PatientResult:
     n_test: int
     y_true: np.ndarray
     y_pred: np.ndarray
+    model: object | None = None
 
 
 def evaluate_patient_specific(
@@ -97,11 +98,15 @@ def evaluate_patient_specific(
     cfg: Config = DEFAULT,
     extra_features: tuple[str, ...] = (),
     normalize: bool = False,
+    keep_models: bool = False,
 ) -> tuple[list[PatientResult], Metrics]:
     """Run the full patient-specific protocol and pool the predictions.
 
     Metrics are computed over all patients' test beats pooled into one
     confusion matrix, which is the AAMI reporting convention.
+
+    ``keep_models`` attaches each patient's fine-tuned model to its result, so
+    the same weights can be exported and re-scored (scripts/benchmark.py).
     """
     results: list[PatientResult] = []
 
@@ -122,7 +127,8 @@ def evaluate_patient_specific(
         y_pred = np.argmax(tuned.predict(X_test, verbose=0), axis=1)
 
         results.append(
-            PatientResult(patient, len(train_df), len(test_df), y_test, y_pred)
+            PatientResult(patient, len(train_df), len(test_df), y_test, y_pred,
+                          tuned if keep_models else None)
         )
 
     if not results:

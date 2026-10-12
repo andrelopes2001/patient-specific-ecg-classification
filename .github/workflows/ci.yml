@@ -13,7 +13,7 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install
-        run: pip install -e ".[dev,keras]"
+        run: pip install -e ".[dev,keras,deploy]"
       - name: Lint
         run: ruff check .
       - name: Test

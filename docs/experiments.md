@@ -162,7 +162,10 @@ model capacity or training schedule.
 ```bash
 python scripts/sweep.py --seeds 12 13 14      # the fine-tuning-data curve
 python scripts/train.py --epochs 10 --seed 12 # a single configuration
+python scripts/benchmark.py                   # ONNX/INT8 accuracy and latency
 ```
+
+The benchmark needs the deploy extra: `pip install -e ".[keras,deploy]"`.
 
 The architecture comparison is not wired into a CLI: it was a one-off selection
 study whose conclusion — keep the MLP — is the current default.

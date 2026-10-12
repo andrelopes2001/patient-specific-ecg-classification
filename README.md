@@ -203,12 +203,38 @@ The size is deliberate. The whole pipeline trains and personalises on a **laptop
 CPU with no GPU**, which is what makes on-device personalisation practical: a
 patient's ECG never has to leave their own hardware to adapt the model to them.
 A 28k-parameter network is also small enough to be a credible target for
-wearable-class inference, though **inference latency is not benchmarked here** and
-no latency claim is made.
+wearable-class inference — measured below.
 
 Optional variants prepend the interval to the previous beat and the
 instantaneous heart rate, giving 152 or 153 inputs — cheap rhythm context that a
 single isolated beat cannot carry.
+
+### Deployment: ONNX and INT8
+
+Every DS2 patient's fine-tuned model was exported to ONNX and quantised to INT8,
+then re-scored on the same test beats. Static quantisation calibrates on the
+patient's own five-minute fine-tuning window, which a deployed device already
+holds. Three seeds:
+
+| Format | Size | Macro F1 | κ | Same prediction as Keras | Latency, 1 beat (median / p99) | Throughput, batch 256 |
+|---|---|---|---|---|---|---|
+| ONNX FP32 | 111 KB | 0.857 | 0.889 | 100% | **5.1 / 9.0 µs** | 2.5 M beats/s |
+| ONNX INT8, static | 35 KB | 0.858 | 0.891 | 99.8% | 7.4 / 16.5 µs | 4.1 M beats/s |
+| ONNX INT8, dynamic | **33 KB** | 0.858 | 0.889 | 99.9% | 6.1 / 14.2 µs | **5.0 M beats/s** |
+
+**Quantisation costs no accuracy** — the F1 differences are well inside the
+±0.009 seed spread — and cuts the model to under a third of its size. It does
+*not* make single-beat inference faster: at 28k parameters the
+quantise/dequantise steps outweigh the cheaper matrix multiply, and FP32 wins at
+batch 1. INT8 only pays off on batches. Either way the model is not the
+bottleneck: a beat arrives roughly every 0.8 s, about 150,000 times the FP32
+latency. Calling the Keras model directly takes 1.2 ms per beat, almost all of
+it framework dispatch.
+
+Model inference only — filtering and segmentation are not timed. One CPU thread
+on an AMD Ryzen 7 260 under WSL2, ONNX Runtime 1.31. Data:
+[`deployment_metrics.csv`](results/deployment_metrics.csv),
+[`deployment_latency.csv`](results/deployment_latency.csv).
 
 ## Data and preprocessing
 
@@ -234,8 +260,8 @@ beats, it does not detect them.
 
 ## Reproducing
 
-Data download, environment and the commands behind every table above are in
-[`docs/experiments.md`](docs/experiments.md#reproducing).
+Data download is in [`data/README.md`](data/README.md); the commands behind
+every table above are in [`docs/experiments.md`](docs/experiments.md#reproducing).
 
 ## Citation
 
