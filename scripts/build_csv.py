@@ -22,7 +22,6 @@ from pathlib import Path
 
 from download_data import RECORDS
 
-
 SUFFIXES = ("", "_annotations", "_ecg_annotated")
 
 
@@ -53,7 +52,7 @@ def build_record(rec: int, src: Path, dst: Path) -> None:
         w = csv.writer(f)
         w.writerow(["Sample", "Classification", "Aux Note"])
         w.writerows(zip(annotation.sample, annotation.symbol,
-                        annotation.aux_note))
+                        annotation.aux_note, strict=True))
 
     # {id}_ecg_annotated.csv -- left join of signal onto annotations by index
     ecg = pd.read_csv(dst / f"{rec}.csv")

@@ -65,8 +65,8 @@ def main() -> int:
             per_seed.append(m)
             print(f"  {minutes} min, seed {seed}: {m.summary()}", flush=True)
 
-        agg = lambda fn: float(np.mean([fn(m) for m in per_seed]))  # noqa: E731
-        std = lambda fn: float(np.std([fn(m) for m in per_seed]))   # noqa: E731
+        agg = lambda fn, ms=per_seed: float(np.mean([fn(m) for m in ms]))  # noqa: E731
+        std = lambda fn, ms=per_seed: float(np.std([fn(m) for m in ms]))   # noqa: E731
         row = {
             "augmentation": "none", "extra_features": "none",
             "train_minutes": minutes, "test_from_minute": cfg.test_minute,

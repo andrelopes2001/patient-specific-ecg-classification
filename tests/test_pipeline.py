@@ -26,7 +26,7 @@ import pytest
 from ecg.config import CLASSES, Config, seed_everything
 from ecg.data import load_record
 from ecg.preprocessing import denoise
-from ecg.segmentation import segment_record, to_features, to_matrix, one_hot
+from ecg.segmentation import one_hot, segment_record, to_features, to_matrix
 
 FIXTURES = Path(__file__).parent / "fixtures"
 RECORD = 213
@@ -166,8 +166,10 @@ def test_extra_features_widen_input():
 
 def test_seeding_is_reproducible():
     import random
-    seed_everything(12); a = (random.random(), np.random.rand())
-    seed_everything(12); b = (random.random(), np.random.rand())
+    seed_everything(12)
+    a = (random.random(), np.random.rand())
+    seed_everything(12)
+    b = (random.random(), np.random.rand())
     assert a == b
 
 

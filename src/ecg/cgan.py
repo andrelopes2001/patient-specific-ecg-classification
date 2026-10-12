@@ -144,7 +144,7 @@ class _MinMax:
         self.lo_pct = lo_pct
         self.hi_pct = hi_pct
 
-    def fit(self, X: np.ndarray) -> "_MinMax":
+    def fit(self, X: np.ndarray) -> _MinMax:
         self.lo = float(np.percentile(X, self.lo_pct))
         self.hi = float(np.percentile(X, self.hi_pct))
         self.span = max(self.hi - self.lo, 1e-12)

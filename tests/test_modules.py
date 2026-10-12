@@ -185,7 +185,7 @@ def test_fine_tune_does_not_mutate_the_global_model():
     tuned, losses = fine_tune(global_model, X, y, Config(), max_epochs=1)
 
     assert len(losses) == 1
-    for w_before, w_after in zip(before, global_model.get_weights()):
+    for w_before, w_after in zip(before, global_model.get_weights(), strict=True):
         np.testing.assert_array_equal(
             w_before, w_after, err_msg="global model was mutated by fine_tune"
         )

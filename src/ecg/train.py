@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from .balance import balanced_class_weights
-from .config import CLASSES, DEFAULT, DS1, DS2, Config
+from .config import DEFAULT, DS1, DS2, Config
 from .evaluate import Metrics, compute_metrics
 from .preprocessing import fit_scaler
 from .segmentation import one_hot, to_features
@@ -188,6 +188,7 @@ def train_global(
         batch_size=cfg.batch_size,
         verbose=0,
         callbacks=callbacks,
-        class_weight=balanced_class_weights(y, cfg.n_classes) if cfg.class_weight else None,
+        class_weight=(balanced_class_weights(y, cfg.n_classes)
+                      if cfg.class_weight else None),
     )
     return model, history
